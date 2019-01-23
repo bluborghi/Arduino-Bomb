@@ -8,7 +8,25 @@
 const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
+String entries[20][2] = {                  //BombStatus
+  {"----------------","----------------"}, //0
+  {"Bomba pronta    ","A=opzioni       "}, //1
+  {"Quanti min?     ","min:<  >    A=ok"}, //2
+  {"Password?       ","pw:<      > A=ok"}, //3
+  {"min:   pw:      ","A=start B=abort "}, //4
+  {"Esplode in mm:ss","pw:<      > A=ok"}, //5
+  {"Codice sbagliato","RIPROVA TRA s..."}, //6
+  {"Disinnescata! :)","mm:ss - B=esci  "}, //7
+  {"Esplosa! :(     ","00:00 - B=esci  "}  //8
+};
 
+unsigned long timeLeft;
+unsigned long lastRefresh;
+unsigned long timerStart = 0;
+int BombMin = 0;
+int BombStatus = 0;
+char password[7] = {'0','0','0','0','0','0'}; 
+char tryPassword[7] = {'0','0','0','0','0','0'};
 const byte rows = 4; //four rows
 const byte cols = 4; //three columns
 char keys[rows][cols] = {
@@ -22,16 +40,113 @@ byte colPins[cols] =  {9,8,7,6};//connect to the column pinouts of the keypad
 Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, rows, cols );
 
 void setup() {
+  
   Serial.begin(9600);
   // set up the LCD's number of columns and rows:
   lcd.begin(16, 2);
-  // Print a message to the LCD.
-  lcd.print("hello, world!");
+  BombStatus = 0;  
+  printEntry(BombStatus);
+  
+  delay(1000);
+  BombStatus = 1;  
+  printEntry(BombStatus);
+  lastRefresh = millis();
 }
 
 void loop() {
   char key = keypad.getKey();
+  if (key != NO_KEY){
+    Serial.println(key);
+    switch (BombStatus) {
+      case 1:
+            {
+            if (key == 'A') BombStatus = 2;
+            break;
+            }
+      case 2:
+            {
+              if (key == 'A' && BombMin>0) BombStatus = 3;
+              else if(key >= '0' && key <= '9') 
+              {
+                BombMin = BombMin%10; // lascia solo la cifra delle unità
+                BombMin = BombMin*10; // sposta la cifra delle unità nella cifra delle decine
+                BombMin = BombMin + (key - 48); // Aggiungo il valore di key, il -48 è per la coinversione ascii -> int
+              } 
+              break;
+            }
+       case 3:
+            {
+              if (key == 'A') BombStatus = 4;
+              else if(key >= '0' && key <= '9') 
+              {
+                for (int i=0; i<5; i++){
+                  password[i] = password[i+1];                  
+                }
+                password[5] = key;
+              } 
+              break;
+            }
+        case 4:
+            {
+              if (key == 'A')
+              {
+                BombStatus = 5;
+                for (int i = 0; i<6; i++) tryPassword[i] = '0';
+                timerStart = millis();
+              }
+              else if(key == 'B') BombStatus = 1;
+              break;
+            }
+        case 5:
+            {
+              if (key == 'A') 
+              {
+                bool equal = true;
+                for (int i=0;i<6;i++)
+                {
+                  if (password[i] != tryPassword[i]) equal = false;
+                }
+                if (!equal) BombStatus = 6;
+                else BombStatus = 7;
+              }
+              else if(key >= '0' && key <= '9') 
+              {
+                for (int i=0; i<5; i++){
+                  tryPassword[i] = tryPassword[i+1];                  
+                }
+                tryPassword[5] = key;
+              } 
+              break;
+            }
+    }
+  }
 
+  if (timerStart != 0) //se siamo nella fase di conto alla rovescia
+  {
+    unsigned long elapsedTime = millis() - timerStart;
+    unsigned long LongBombMin = BombMin;
+    unsigned long endTime = timerStart + LongBombMin*60*1000;
+    timeLeft = endTime - millis();
+    if (millis()>=endTime) BombStatus = 8;
+    Serial.println("-------------------------------------");
+    Serial.println(LongBombMin);
+    Serial.println(elapsedTime);
+    Serial.println(endTime);
+    Serial.println(timerStart);
+    Serial.println(timeLeft);
+  }
+  
+  if ((millis() - lastRefresh)>200)
+  {
+    printEntry(BombStatus);
+    lastRefresh = millis();
+  }
+ 
+
+
+
+  
+ /*TEST
   if (key != NO_KEY){
     Serial.println(key);
     lcd.setCursor(13,1);
@@ -45,14 +160,59 @@ void loop() {
   int ore = minutiTOT/60;
   int minuti = minutiTOT%60;
   int secondi = secondiTOT%60;
-
   
+  char timestamp[10];
 
-  char tbs[10];
-
-
- 
-  sprintf(tbs, "%d:%02d:%02d", ore, minuti, secondi);
-  lcd.print(tbs); 
+  sprintf(timestamp, "%d:%02d:%02d", ore, minuti, secondi);
+  lcd.print(timestamp); 
   lcd.print("");//does not compile without this
+  */
+}
+
+void printEntry(int i){
+  lcd.setCursor(0,0);
+  lcd.print(entries[i][0]);
+  lcd.setCursor(0,1);
+  lcd.print(entries[i][1]);
+
+  switch (i) {
+      case 2:
+           { 
+            lcd.setCursor(5,1);
+            char mins[2];
+            sprintf(mins, "%02d",BombMin);
+            lcd.print(mins);
+            break;
+           }
+      case 3:
+           { 
+            lcd.setCursor(4,1);
+            lcd.print(password);
+            break;
+           }
+      case 4:
+           { 
+            lcd.setCursor(4,0);
+            char mins[2];
+            sprintf(mins, "%02d",BombMin);
+            lcd.print(mins);
+            lcd.setCursor(10,0);
+            lcd.print(password);
+            break;
+           }
+      case 5:
+           { 
+            lcd.setCursor(11,0);
+            char timestamp[6];
+            int secondiTOT = timeLeft/1000;
+            int minutiTOT = secondiTOT/60;
+            int secondi = secondiTOT%60;
+            sprintf(timestamp, "%02d:%02d",minutiTOT,secondi);
+            lcd.print(timestamp);
+            
+            lcd.setCursor(4,1);
+            lcd.print(tryPassword);
+            break;
+           }
+    }
 }
