@@ -16,10 +16,11 @@ String entries[20][2] = {                  //BombStatus
   {"min:   pw:      ","A=start B=abort "}, //4
   {"Esplode in mm:ss","pw:<      > A=ok"}, //5
   {"Codice sbagliato","RIPROVA TRA s..."}, //6
-  {"Disinnescata! :)","mm:ss - B=esci  "}, //7
-  {"Esplosa! :(     ","00:00 - B=esci  "}  //8
+  {"Disinnescata! :)","mm:ss     B=esci"}, //7
+  {"Esplosa! :(     ","00:00     B=esci"}  //8
 };
 
+unsigned long nextTry;
 unsigned long timeLeft;
 unsigned long lastRefresh;
 unsigned long timerStart = 0;
@@ -106,7 +107,11 @@ void loop() {
                 {
                   if (password[i] != tryPassword[i]) equal = false;
                 }
-                if (!equal) BombStatus = 6;
+                if (!equal) 
+                {
+                  BombStatus = 6;
+                  nextTry = millis() + 5000;
+                }
                 else BombStatus = 7;
               }
               else if(key >= '0' && key <= '9') 
@@ -118,10 +123,25 @@ void loop() {
               } 
               break;
             }
+        case 7:
+        case 8:
+            {
+              if (key == 'B') 
+              {
+                BombStatus = 1;
+              }
+              break;
+            }
     }
   }
 
-  if (timerStart != 0) //se siamo nella fase di conto alla rovescia
+
+  if (BombStatus == 6 && millis()>=nextTry)
+  {
+    BombStatus = 5;
+  }
+
+  if (timerStart != 0 && (BombStatus==5 || BombStatus==6) ) //se siamo nella fase di conto alla rovescia
   {
     unsigned long elapsedTime = millis() - timerStart;
     unsigned long LongBombMin = BombMin;
@@ -136,7 +156,8 @@ void loop() {
     Serial.println(timeLeft);
   }
   
-  if ((millis() - lastRefresh)>200)
+  
+  if ((millis() - lastRefresh)>50)
   {
     printEntry(BombStatus);
     lastRefresh = millis();
@@ -213,6 +234,26 @@ void printEntry(int i){
             lcd.setCursor(4,1);
             lcd.print(tryPassword);
             break;
+           }
+      case 6:
+           { 
+            lcd.setCursor(12,1);
+            if (millis()<=nextTry)
+            {
+              lcd.print( (nextTry-millis())/1000 +1 );
+            }
+            break;
+           }
+      case 7:
+           {
+            lcd.setCursor(0,1);
+            char timestamp[6];
+            int secondiTOT = timeLeft/1000;
+            int minutiTOT = secondiTOT/60;
+            int secondi = secondiTOT%60;
+            sprintf(timestamp, "%02d:%02d",minutiTOT,secondi);
+            lcd.print(timestamp);
+            break;    
            }
     }
 }
