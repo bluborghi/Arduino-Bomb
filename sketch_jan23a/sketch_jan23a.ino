@@ -1,7 +1,15 @@
+#include <Tone.h>
 #include <Key.h>
 #include <Keypad.h>
 #include <stdio.h>
 #include <LiquidCrystal.h>
+
+
+int tonePin = 10;
+float mod = 1;
+unsigned long toneInterval = 1000;
+unsigned long toneDuration = 1;
+unsigned long lastTimeOn = 0;
 
 // initialize the library by associating any needed LCD interface pin
 // with the arduino pin number it is connected to
@@ -41,8 +49,9 @@ byte colPins[cols] =  {9,8,7,6};//connect to the column pinouts of the keypad
 Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, rows, cols );
 
 void setup() {
-  
   Serial.begin(9600);
+  pinMode(tonePin,OUTPUT);
+  
   // set up the LCD's number of columns and rows:
   lcd.begin(16, 2);
   BombStatus = 0;  
@@ -94,6 +103,7 @@ void loop() {
                 BombStatus = 5;
                 for (int i = 0; i<6; i++) tryPassword[i] = '0';
                 timerStart = millis();
+                mod = 1; //sets interval between beeps "normal"
               }
               else if(key == 'B') BombStatus = 1;
               break;
@@ -154,6 +164,10 @@ void loop() {
     Serial.println(endTime);
     Serial.println(timerStart);
     Serial.println(timeLeft);
+
+    if (timeLeft<=30000 && timeLeft>10000) mod = 0.5;
+    if (timeLeft<=10000 && timeLeft>3000) mod = 0.2;
+    if (timeLeft<=3000) mod = 0.1;
   }
   
   
@@ -163,9 +177,19 @@ void loop() {
     lastRefresh = millis();
   }
  
+  if ((BombStatus == 5 || BombStatus == 6) && (millis() - lastTimeOn)>=toneInterval*mod )
+  {
+    analogWrite(tonePin,400);
+    lastTimeOn = millis();
+  }
 
+  if ( (millis() - lastTimeOn) >= toneDuration )
+  {
+    if ((BombStatus!=8) || (BombStatus==8 && ( (millis() - lastTimeOn) >= toneDuration*2000)) )
+    analogWrite(tonePin,0);
+  }
 
-
+  
   
  /*TEST
   if (key != NO_KEY){
