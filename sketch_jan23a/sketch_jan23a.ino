@@ -1,10 +1,9 @@
-#include <Tone.h>
 #include <Key.h>
 #include <Keypad.h>
 #include <stdio.h>
 #include <LiquidCrystal.h>
 
-
+int firePin = A5;
 int tonePin = 10;
 float mod = 1;
 unsigned long toneInterval = 1000;
@@ -51,7 +50,7 @@ Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, rows, cols );
 void setup() {
   Serial.begin(9600);
   pinMode(tonePin,OUTPUT);
-  
+  pinMode(firePin,OUTPUT);
   // set up the LCD's number of columns and rows:
   lcd.begin(16, 2);
   BombStatus = 0;  
@@ -151,13 +150,20 @@ void loop() {
     BombStatus = 5;
   }
 
+  bool x = false;
   if (timerStart != 0 && (BombStatus==5 || BombStatus==6) ) //se siamo nella fase di conto alla rovescia
   {
     unsigned long elapsedTime = millis() - timerStart;
     unsigned long LongBombMin = BombMin;
     unsigned long endTime = timerStart + LongBombMin*60*1000;
     timeLeft = endTime - millis();
-    if (millis()>=endTime) BombStatus = 8;
+    if (millis()>=endTime) 
+    {
+      BombStatus = 8;
+      digitalWrite(firePin,HIGH);
+      x= true;
+    }
+    
     Serial.println("-------------------------------------");
     Serial.println(LongBombMin);
     Serial.println(elapsedTime);
@@ -169,6 +175,7 @@ void loop() {
     if (timeLeft<=10000 && timeLeft>3000) mod = 0.2;
     if (timeLeft<=3000) mod = 0.1;
   }
+
   
   
   if ((millis() - lastRefresh)>50)
@@ -177,16 +184,20 @@ void loop() {
     lastRefresh = millis();
   }
  
-  if ((BombStatus == 5 || BombStatus == 6) && (millis() - lastTimeOn)>=toneInterval*mod )
+  if (x || ((BombStatus == 5 || BombStatus == 6) && (millis() - lastTimeOn)>=toneInterval*mod) )
   {
     analogWrite(tonePin,400);
     lastTimeOn = millis();
+    x = false;
   }
 
   if ( (millis() - lastTimeOn) >= toneDuration )
   {
-    if ((BombStatus!=8) || (BombStatus==8 && ( (millis() - lastTimeOn) >= toneDuration*2000)) )
-    analogWrite(tonePin,0);
+    if ((BombStatus!=8) || (BombStatus==8 && ( (millis() - lastTimeOn) >= toneDuration*4000)) )
+    {
+      analogWrite(tonePin,0);
+      digitalWrite(firePin,LOW);
+    }
   }
 
   
@@ -280,4 +291,11 @@ void printEntry(int i){
             break;    
            }
     }
+}
+
+
+void beep()
+{
+  analogWrite(tonePin,400);
+  lastTimeOn = millis();
 }
