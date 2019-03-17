@@ -3,6 +3,13 @@
 #include <stdio.h>
 #include <LiquidCrystal.h>
 
+enum modalita {
+  timer = 0,
+  code = 1
+};
+
+modalita currentMod = 0;
+
 int firePin = A5;
 int tonePin = 10;
 float mod = 1;
@@ -24,14 +31,25 @@ String entries[20][2] = {                  //BombStatus
   {"Esplode in mm:ss","pw:<      > A=ok"}, //5
   {"Codice sbagliato","RIPROVA TRA s..."}, //6
   {"Disinnescata! :)","mm:ss     B=esci"}, //7
-  {"Esplosa! :(     ","00:00     B=esci"}  //8
+  {"Esplosa! :(     ","00:00     B=esci"}, //8
+  {"Modalità?       ","A=timer B=codice"}, //9
+  {"Quanti secondi? ","sec:<  >    A=ok"}, //10
+  {"sec:   pw:      ","A=start B=abort "}, //11
+  {"pw?  x tentativi","pw:<      > A=ok"}, //12
+  {"Missione fallita","          B=esci"}, //13
+  {"Esplode in mm:ss","**allontanarsi**"}, //14
+  {"Bomba esplosa!!!","          B=esci"}, //15
 };
 
 unsigned long nextTry;
 unsigned long timeLeft;
 unsigned long lastRefresh;
 unsigned long timerStart = 0;
+
+//questi servono solo durante l'inizializzazione
 int BombMin = 0;
+int BombSec = 0;
+
 int BombStatus = 0;
 char password[7] = {'0','0','0','0','0','0'}; 
 char tryPassword[7] = {'0','0','0','0','0','0'};
@@ -66,82 +84,7 @@ void loop() {
   char key = keypad.getKey();
   if (key != NO_KEY){
     Serial.println(key);
-    switch (BombStatus) {
-      case 1:
-            {
-            if (key == 'A') BombStatus = 2;
-            break;
-            }
-      case 2:
-            {
-              if (key == 'A' && BombMin>0) BombStatus = 3;
-              else if(key >= '0' && key <= '9') 
-              {
-                BombMin = BombMin%10; // lascia solo la cifra delle unità
-                BombMin = BombMin*10; // sposta la cifra delle unità nella cifra delle decine
-                BombMin = BombMin + (key - 48); // Aggiungo il valore di key, il -48 è per la coinversione ascii -> int
-              } 
-              break;
-            }
-       case 3:
-            {
-              if (key == 'A') BombStatus = 4;
-              else if(key >= '0' && key <= '9') 
-              {
-                for (int i=0; i<5; i++){
-                  password[i] = password[i+1];                  
-                }
-                password[5] = key;
-              } 
-              break;
-            }
-        case 4:
-            {
-              if (key == 'A')
-              {
-                BombStatus = 5;
-                for (int i = 0; i<6; i++) tryPassword[i] = '0';
-                timerStart = millis();
-                mod = 1; //sets interval between beeps "normal"
-              }
-              else if(key == 'B') BombStatus = 1;
-              break;
-            }
-        case 5:
-            {
-              if (key == 'A') 
-              {
-                bool equal = true;
-                for (int i=0;i<6;i++)
-                {
-                  if (password[i] != tryPassword[i]) equal = false;
-                }
-                if (!equal) 
-                {
-                  BombStatus = 6;
-                  nextTry = millis() + 5000;
-                }
-                else BombStatus = 7;
-              }
-              else if(key >= '0' && key <= '9') 
-              {
-                for (int i=0; i<5; i++){
-                  tryPassword[i] = tryPassword[i+1];                  
-                }
-                tryPassword[5] = key;
-              } 
-              break;
-            }
-        case 7:
-        case 8:
-            {
-              if (key == 'B') 
-              {
-                BombStatus = 1;
-              }
-              break;
-            }
-    }
+    keyPressed(key);
   }
 
 
@@ -151,7 +94,7 @@ void loop() {
   }
 
   bool x = false;
-  if (timerStart != 0 && (BombStatus==5 || BombStatus==6) ) //se siamo nella fase di conto alla rovescia
+  if (timerStart != 0 && (BombStatus==5 || BombStatus==6) && currentMod == modalita.timer) //se siamo nella fase di conto alla rovescia della modalità timer
   {
     unsigned long elapsedTime = millis() - timerStart;
     unsigned long LongBombMin = BombMin;
@@ -161,7 +104,7 @@ void loop() {
     {
       BombStatus = 8;
       digitalWrite(firePin,HIGH);
-      x= true;
+      x = true;
     }
     
     Serial.println("-------------------------------------");
@@ -225,18 +168,193 @@ void loop() {
   */
 }
 
-void printEntry(int i){
+
+void keyPressed(char key)
+{
+    switch (BombStatus) {
+      case 1:
+            {
+             if (key == 'A') BombStatus = 9;
+             break;
+            }
+      case 2:
+            {
+              if (key == 'A' && BombMin>0) BombStatus = 3;
+              else if(key >= '0' && key <= '9') 
+              {
+                BombMin = BombMin%10; // lascia solo la cifra delle unità
+                BombMin = BombMin*10; // sposta la cifra delle unità nella cifra delle decine
+                BombMin = BombMin + (key - 48); // Aggiungo il valore di key, il -48 è per la coinversione ascii -> int
+              } 
+              break;
+            }
+       case 3:
+            {
+              if (key == 'A')
+              {
+                if (currentMod == modalita.timer)  BombStatus = 4;
+                else if (currentMod == modalita.code) BombStatus = 11;
+              }
+              else if(key >= '0' && key <= '9') 
+              {
+                for (int i=0; i<5; i++){
+                  password[i] = password[i+1];                  
+                }
+                password[5] = key;
+              } 
+              break;
+            }
+        case 4:
+        case 11:
+            {
+              if (key == 'A')
+              {
+                if (currentMod = modalita.timer) 
+                {
+                  BombStatus = 5;
+                  timerStart = millis();
+                }
+                else if (currentMod = modalita.code)
+                {
+                  BombStatus = 12;
+                }
+                
+                for (int i = 0; i<6; i++) tryPassword[i] = '0';
+                mod = 1; //sets interval between beeps "normal"
+              }
+              else if(key == 'B') BombStatus = 1;
+              break;
+            }
+        case 5:
+            {
+              if (key == 'A') 
+              {
+                bool equal = true;
+                for (int i=0;i<6;i++)
+                {
+                  if (password[i] != tryPassword[i]) equal = false;
+                }
+                if (!equal) 
+                {
+                  BombStatus = 6;
+                  nextTry = millis() + 5000;
+                }
+                else BombStatus = 7;
+              }
+              else if(key >= '0' && key <= '9') 
+              {
+                for (int i=0; i<5; i++){
+                  tryPassword[i] = tryPassword[i+1];                  
+                }
+                tryPassword[5] = key;
+              } 
+              break;
+            }
+        case 7:
+        case 8:
+        case 13:
+        case 15:
+            {
+              if (key == 'B') 
+              {
+                BombStatus = 1;
+              }
+              break;
+            }
+        case 9:
+            {
+              if (key == 'A')
+              {
+                currentMod = 0;
+                BombStatus = 2;
+              }
+              else if (key == 'B')
+              {
+                currentMod = 1;
+                BombStatus = 10;
+              }
+              break;
+            }
+        case 10:
+            {
+              if (key == 'A' && BombSec>0) BombStatus = 3;
+              else if(key >= '0' && key <= '9') 
+              {
+                BombSec = BombSec%10; // lascia solo la cifra delle unità
+                BombSec = BombSec*10; // sposta la cifra delle unità nella cifra delle decine
+                BombSec = BombSec + (key - 48); // Aggiungo il valore di key, il -48 è per la coinversione ascii -> int
+              } 
+              break;
+            }
+        case 11:
+            {
+              if (key == 'A') BombStatus = 12;
+              else if (key == 'B') BombStatus = 1;
+              break;
+            }
+        case 12:
+        {
+          if (key == 'A') 
+          {
+            bool equal = true;
+            
+            for (int i=0;i<6;i++)
+            {
+              if (password[i] != tryPassword[i]) 
+              {
+                equal = false;
+                break;
+              }              
+            }
+              
+            if (!equal) 
+            {
+              if (remainingAttemps>0)
+              {
+                remainingAttemps--;
+                BombStatus = 6; //riprova tra...
+                nextTry = millis() + 5000;
+              }
+              else 
+              {
+                BombStatus = 13; //missione fallita
+              }
+            }
+            else 
+            {
+              BombStatus = 14; //esplode in...
+              timerStart = millis();
+            }
+          }
+          else if(key >= '0' && key <= '9') 
+          {
+            for (int i=0; i<5; i++)
+            {
+              tryPassword[i] = tryPassword[i+1];                  
+            }
+            tryPassword[5] = key;
+          } 
+          break;
+        }
+        case 14:
+        {
+        }
+    }
+}
+
+void printEntry(int state){
   lcd.setCursor(0,0);
   lcd.print(entries[i][0]);
   lcd.setCursor(0,1);
   lcd.print(entries[i][1]);
 
-  switch (i) {
+  //se alcune parti della entry sono dinamiche
+  switch (state) {
       case 2:
            { 
             lcd.setCursor(5,1);
             char mins[2];
-            sprintf(mins, "%02d",BombMin);
+            sprintf(mins, "%02d",BombMin);//copia il numero a due cifre BombMin nella stringa mins
             lcd.print(mins);
             break;
            }
@@ -290,6 +408,24 @@ void printEntry(int i){
             lcd.print(timestamp);
             break;    
            }
+      case 10
+          {
+            lcd.setCursor(5,1);
+            char secs[2];
+            sprintf(secs, "%02d",BombSec);//copia il numero a due cifre BombSec nella stringa secs
+            lcd.print(secs);
+            break;
+          }
+      case 11:
+           { 
+            lcd.setCursor(4,0);
+            char secs[2];
+            sprintf(secs, "%02d",BombSec);
+            lcd.print(secs);
+            lcd.setCursor(10,0);
+            lcd.print(password);
+            break;
+           }    
     }
 }
 
