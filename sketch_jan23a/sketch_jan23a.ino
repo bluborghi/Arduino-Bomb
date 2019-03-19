@@ -336,9 +336,6 @@ void keyPressed(char key)
           } 
           break;
         }
-        case 14:
-        {
-        }
     }
 }
 
@@ -426,6 +423,31 @@ void printEntry(int state){
             lcd.print(password);
             break;
            }    
+      case 12:
+           { 
+            //STAMPA LA PASSWORD  
+            lcd.setCursor(4,1);
+            lcd.print(password);
+
+            //stampa numero di tentativi rimasti
+            lcd.setCursor(5,0);
+            lcd.print(remainingAttemps);
+            
+            break;
+           }
+       case 14:
+           { 
+            lcd.setCursor(0,1);
+            char timestamp[6];
+            int secondiTOT = timeLeft/1000;
+            int minutiTOT = secondiTOT/60;
+            int secondi = secondiTOT%60;
+            sprintf(timestamp, "%02d:%02d",minutiTOT,secondi);
+            lcd.print(timestamp);
+            break;  
+           }
+      
+           
     }
 }
 
