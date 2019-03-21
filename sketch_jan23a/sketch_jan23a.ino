@@ -11,7 +11,12 @@ enum modalita {
 modalita currentMod = 0;
 
 int firePin = A5;
+bool firePinStatus = LOW;
+long int fireEndTime;
+
 int tonePin = 10;
+bool tonePinStatus = LOW;
+long int toneEndTime;
 float mod = 1;
 unsigned long toneInterval = 1000;
 unsigned long toneDuration = 1;
@@ -41,6 +46,7 @@ String entries[20][2] = {                  //BombStatus
   {"Bomba esplosa!!!", "          B=esci"}, //15
 };
 
+unsigned long endTime;
 unsigned long nextTry;
 unsigned long timeLeft;
 unsigned long lastRefresh;
@@ -52,8 +58,10 @@ int BombSec = 0;
 
 int remainingAttemps = 0;
 int BombStatus = 0;
+
 char password[7] = {'0', '0', '0', '0', '0', '0'};
 char tryPassword[7] = {'0', '0', '0', '0', '0', '0'};
+
 const byte rows = 4; //four rows
 const byte cols = 4; //three columns
 char keys[rows][cols] = {
@@ -85,41 +93,10 @@ void loop() {
   char key = keypad.getKey();
   if (key != NO_KEY) {
     Serial.println(key);
-    keyPressed(key);
+    keyPressed(key); //what to do when a key is pressed (logic)
   }
 
-
-  if (BombStatus == 6 && millis() >= nextTry)
-  {
-    BombStatus = 5;
-  }
-
-  bool x = false;
-  if (timerStart != 0 && (BombStatus == 5 || BombStatus == 6) && currentMod == timer) //se siamo nella fase di conto alla rovescia della modalità timer
-  {
-    unsigned long elapsedTime = millis() - timerStart;
-    unsigned long LongBombMin = BombMin;
-    unsigned long endTime = timerStart + LongBombMin * 60 * 1000;
-    timeLeft = endTime - millis();
-    if (millis() >= endTime)
-    {
-      BombStatus = 8;
-      digitalWrite(firePin, HIGH);
-      x = true;
-    }
-
-    Serial.println("-------------------------------------");
-    Serial.println(LongBombMin);
-    Serial.println(elapsedTime);
-    Serial.println(endTime);
-    Serial.println(timerStart);
-    Serial.println(timeLeft);
-
-    if (timeLeft <= 30000 && timeLeft > 10000) mod = 0.5;
-    if (timeLeft <= 10000 && timeLeft > 3000) mod = 0.2;
-    if (timeLeft <= 3000) mod = 0.1;
-  }
-
+  performTimeDependantActions();
 
   //refresh the LCD
   if ((millis() - lastRefresh) > 50)
@@ -128,47 +105,110 @@ void loop() {
     lastRefresh = millis();
   }
 
-  if (x || ((BombStatus == 5 || BombStatus == 6) && (millis() - lastTimeOn) >= toneInterval * mod) )
-  {
-    analogWrite(tonePin, 400);
-    lastTimeOn = millis();
-    x = false;
-  }
 
-  if ( (millis() - lastTimeOn) >= toneDuration )
-  {
-    if ((BombStatus != 8) || (BombStatus == 8 && ( (millis() - lastTimeOn) >= toneDuration * 4000)) )
+
+
+
+
+
+
+
+  /*
+
+    //man this code is shit....
+    bool x = false;
+    if (timerStart != 0 && (BombStatus == 5 || BombStatus == 6) && currentMod == timer) //se siamo nella fase di conto alla rovescia della modalità timer
     {
-      analogWrite(tonePin, 0);
-      digitalWrite(firePin, LOW);
+      unsigned long elapsedTime = millis() - timerStart;
+      unsigned long LongBombMin = BombMin;
+      unsigned long endTime = timerStart + LongBombMin * 60 * 1000;
+      timeLeft = endTime - millis();
+      if (millis() >= endTime)
+      {
+        BombStatus = 8;
+        digitalWrite(firePin, HIGH);
+        x = true;
+      }
+
+      Serial.println("-------------------------------------");
+      Serial.println(LongBombMin);
+      Serial.println(elapsedTime);
+      Serial.println(endTime);
+      Serial.println(timerStart);
+      Serial.println(timeLeft);
+
+      if (timeLeft <= 30000 && timeLeft > 10000) mod = 0.5;
+      if (timeLeft <= 10000 && timeLeft > 3000) mod = 0.2;
+      if (timeLeft <= 3000) mod = 0.1;
     }
-  }
 
 
 
-  /*TEST
-    if (key != NO_KEY){
-     Serial.println(key);
-     lcd.setCursor(13,1);
-     lcd.print(key);
+    if (x || ((BombStatus == 5 || BombStatus == 6) && (millis() - lastTimeOn) >= toneInterval * mod) )
+    {
+      analogWrite(tonePin, 400);
+      lastTimeOn = millis();
+      x = false;
     }
 
-    lcd.setCursor(0,2);
-    // print the number of seconds since reset:
-    int secondiTOT = millis()/1000;
-    int minutiTOT = secondiTOT/60;
-    int ore = minutiTOT/60;
-    int minuti = minutiTOT%60;
-    int secondi = secondiTOT%60;
-
-    char timestamp[10];
-
-    sprintf(timestamp, "%d:%02d:%02d", ore, minuti, secondi);
-    lcd.print(timestamp);
-    lcd.print("");//does not compile without this
+    if ( (millis() - lastTimeOn) >= toneDuration )
+    {
+      if ((BombStatus != 8) || (BombStatus == 8 && ( (millis() - lastTimeOn) >= toneDuration * 4000)) )
+      {
+        analogWrite(tonePin, 0);
+        digitalWrite(firePin, LOW);
+      }
+    }
   */
 }
 
+void performTimeDependantActions() {
+  updatePinsStatus();
+  setBeepFrequencyMod();
+
+  if (BombStatus == 6 && millis() >= nextTry) {
+    BombStatus = 5;
+  }
+
+  if (getTimeLeft() <= 0 && (BombStatus == 5 || BombStatus == 6 || BombStatus == 14)) {
+    if (currentMod == timer) BombStatus = 8; //bomba esplosa  (hai perso)
+    else if (currentMod == code) BombStatus = 15; //bomba esplosa (hai vinto)
+    
+    firePinStatus = HIGH;
+    fireEndTime = millis() + 4000;
+    tonePinStatus = HIGH;
+    toneEndTime = millis() + 4000;
+  }
+
+  if ((BombStatus == 5 || BombStatus == 6 || BombStatus == 14) && (millis() - lastTimeOn) >= toneInterval * mod){
+    tonePinStatus = HIGH;
+    toneEndTime = millis() + toneDuration;
+  }
+  
+}
+
+void setBeepFrequencyMod() {
+  long int timeLeft = getTimeLeft();
+  if (timeLeft <= 30000 && timeLeft > 10000) mod = 0.5;
+  if (timeLeft <= 10000 && timeLeft > 3000) mod = 0.2;
+  if (timeLeft <= 3000) mod = 0.1;
+}
+
+void updatePinsStatus() {
+  long int now = millis();
+  if (now >= fireEndTime) firePinStatus = LOW;
+  if (now >= toneEndTime) tonePinStatus = LOW;
+  
+  digitalWrite(firePin, firePinStatus);
+  
+  analogWrite(tonePin, tonePinStatus * 400); //0 or 400
+  lastTimeOn = now;
+}
+
+
+long int getTimeLeft() {
+  return timeLeft = endTime - millis();
+}
 
 void keyPressed(char key)
 {
@@ -197,7 +237,7 @@ void keyPressed(char key)
     case 4: {
         if (key == 'A') {
           BombStatus = 5;
-          timerModeStart();
+          bombTimerStart();
         }
         else if (key == 'B')
           BombStatus = 1;
@@ -248,29 +288,21 @@ void keyPressed(char key)
       }
     case 12: {
         if (key == 'A') {
-          bool equal = isPasswordCorrect(tryPassword);
-          if (!equal)
-          {
-            if (remainingAttemps > 0)
-              remainingAttemps--;
-            retryPasswordState();
-            else
-              BombStatus = 13; //missione fallita
-          }
-          else
-          {
+          if ( isPasswordCorrect(tryPassword)) {
             BombStatus = 14; //esplode in...
             bombTimerStart();
           }
+          else {
+            if (remainingAttemps > 0) {
+              remainingAttemps--;
+              wrongPasswordState();
+            }
+            else
+              BombStatus = 13; //missione fallita
+          }
         }
         else if (key >= '0' && key <= '9')
-        {
-          for (int i = 0; i < 5; i++)
-          {
-            tryPassword[i] = tryPassword[i + 1];
-          }
-          tryPassword[5] = key;
-        }
+          addCharToWordFIFO(tryPassword, key);
         break;
       }
   }
@@ -286,13 +318,13 @@ void modInit(modalita m) {
   }
 }
 
-int wordLength(char _word[]){
-   return sizeof(_word) / sizeof(_word[0]) -1; // returns the size of the char array (how many letters)
+int wordLength(char _word[]) {
+  return sizeof(_word) / sizeof(_word[0]) - 1; // returns the size of the char array (how many letters)
 }
 
-void setWordToZeros(char _word[]){
-   int numberOfChars = wordLength(_word);
-   for (int i = 0; i<numberOfChars; i++) _word[i] = '0';
+void setWordToZeros(char _word[]) {
+  int numberOfChars = wordLength(_word);
+  for (int i = 0; i < numberOfChars; i++) _word[i] = '0';
 }
 
 void wrongPasswordState() {
@@ -303,7 +335,7 @@ void wrongPasswordState() {
 void addCharToIntFromRight(int &i, char c, int maxDigits) {
   i = i * 10; // sposta di un posto verso sinistra tutte le cifre
   i = i + (c - 48); // Aggiungo il valore di key nel posto delle unità, il -48 è per la coinversione ascii -> int
-  i = i % (pow(10, maxDigits) + 1); //rimuove tutte le cifre in eccesso
+  i = i % (int) (pow(10, maxDigits) + 1); //rimuove tutte le cifre in eccesso
 }
 
 void addCharToWordFIFO(char _word[], char c) {
@@ -316,18 +348,21 @@ void addCharToWordFIFO(char _word[], char c) {
 
 void bombTimerStart() {
   timerStart = millis();
-
-  if (currentMode = timer)
-    for (int i = 0; i < 6; i++) tryPassword[i] = '0'; //sets trypassword to zero
+  if (currentMod == timer) {
+    setWordToZeros(tryPassword); //sets trypassword to zero
+    endTime = timerStart + ((long int) BombMin) * 60 * 1000;
+  }
+  else if (currentMod == code) {
+    endTime = timerStart + ((long int) BombSec) * 1000;
+  }
 
   mod = 1; //sets interval between beeps "normal"
-}
 
+}
 
 bool isPasswordCorrect(char pw[]) {
   return strcmp(password, pw) != 0;
 }
-
 
 void printEntry(int state) {
   //rendering static parts of the entry
@@ -440,11 +475,4 @@ void printEntry(int state) {
 
 
   }
-}
-
-
-void beep()
-{
-  analogWrite(tonePin, 400);
-  lastTimeOn = millis();
 }
