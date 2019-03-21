@@ -121,7 +121,7 @@ void loop() {
   }
 
 
-
+  //refresh the LCD
   if ((millis() - lastRefresh) > 50)
   {
     printEntry(BombStatus);
@@ -181,7 +181,7 @@ void keyPressed(char key)
         if (key == 'A' && BombMin > 0)
           BombStatus = 3;
         else if (key >= '0' && key <= '9')
-          addCharToIntFromRight(BombMin, key);
+          addCharToIntFromRight(BombMin, key, 2);
         break;
       }
     case 3: {
@@ -205,7 +205,11 @@ void keyPressed(char key)
       }
     case 5: {
         if (key == 'A') {
-          tryThisPassword(tryPassword);
+          if (isPasswordCorrect (tryPassword))
+            BombStatus = 7; //disinnescata
+          else {
+            wrongPasswordState();
+          }
         }
         else if (key >= '0' && key <= '9')
           addCharToWordFIFO(tryPassword, key);
@@ -228,16 +232,13 @@ void keyPressed(char key)
           currentMod = code;
           BombStatus = 10;
         }
+        modInit(currentMod);
         break;
       }
     case 10: {
         if (key == 'A' && BombSec > 0) BombStatus = 3;
         else if (key >= '0' && key <= '9')
-        {
-          BombSec = BombSec % 10; // lascia solo la cifra delle unità
-          BombSec = BombSec * 10; // sposta la cifra delle unità nella cifra delle decine
-          BombSec = BombSec + (key - 48); // Aggiungo il valore di key, il -48 è per la coinversione ascii -> int
-        }
+          addCharToIntFromRight(BombSec, key, 2);
         break;
       }
     case 11: {
@@ -246,36 +247,20 @@ void keyPressed(char key)
         break;
       }
     case 12: {
-        if (key == 'A')
-        {
-          bool equal = true;
-
-          for (int i = 0; i < 6; i++)
-          {
-            if (password[i] != tryPassword[i])
-            {
-              equal = false;
-              break;
-            }
-          }
-
+        if (key == 'A') {
+          bool equal = isPasswordCorrect(tryPassword);
           if (!equal)
           {
             if (remainingAttemps > 0)
-            {
               remainingAttemps--;
-              BombStatus = 6; //riprova tra...
-              nextTry = millis() + 5000;
-            }
+            retryPasswordState();
             else
-            {
               BombStatus = 13; //missione fallita
-            }
           }
           else
           {
             BombStatus = 14; //esplode in...
-            timerStart = millis();
+            bombTimerStart();
           }
         }
         else if (key >= '0' && key <= '9')
@@ -291,44 +276,67 @@ void keyPressed(char key)
   }
 }
 
+void modInit(modalita m) {
+  if (m == timer) {
+    //write "timer" mode init code here
+  }
+  else if (m == code) {
+    //write "code" mode init code here
+    setWordToZeros(tryPassword);
+  }
+}
 
-void addCharToIntFromRight(int &i, char c) {
-  i = i % 10; // lascia solo la cifra delle unità
-  i = i * 10; // sposta la cifra delle unità nella cifra delle decine
-  i = i + (c - 48); // Aggiungo il valore di key, il -48 è per la coinversione ascii -> int
+int wordLength(char _word[]){
+   return sizeof(_word) / sizeof(_word[0]) -1; // returns the size of the char array (how many letters)
+}
+
+void setWordToZeros(char _word[]){
+   int numberOfChars = wordLength(_word);
+   for (int i = 0; i<numberOfChars; i++) _word[i] = '0';
+}
+
+void wrongPasswordState() {
+  BombStatus = 6; //riprova tra...
+  nextTry = millis() + 5000;
+}
+
+void addCharToIntFromRight(int &i, char c, int maxDigits) {
+  i = i * 10; // sposta di un posto verso sinistra tutte le cifre
+  i = i + (c - 48); // Aggiungo il valore di key nel posto delle unità, il -48 è per la coinversione ascii -> int
+  i = i % (pow(10, maxDigits) + 1); //rimuove tutte le cifre in eccesso
 }
 
 void addCharToWordFIFO(char _word[], char c) {
-  int w_length = sizeof(_word) / sizeof(_word[0]); // returns the size of the char array (how many letters +1)
-
-  for (int i = 0; i < w_length - 2; i++) {
+  int w_length = wordLength(_word);
+  for (int i = 0; i < w_length - 1; i++) {
     _word[i] = _word[i + 1];
   }
-  _word[w_length - 1] = c;
+  _word[w_length] = c;
 }
 
-void timerModeStart() {
+void bombTimerStart() {
   timerStart = millis();
-  for (int i = 0; i < 6; i++) tryPassword[i] = '0';
+
+  if (currentMode = timer)
+    for (int i = 0; i < 6; i++) tryPassword[i] = '0'; //sets trypassword to zero
+
   mod = 1; //sets interval between beeps "normal"
 }
 
-void tryThisPassword(char pw[]) {
-  if (strcmp(password, pw) != 0) {
-    BombStatus = 6;
-    nextTry = millis() + 5000;
-  }
-  else BombStatus = 7;
+
+bool isPasswordCorrect(char pw[]) {
+  return strcmp(password, pw) != 0;
 }
 
 
 void printEntry(int state) {
+  //rendering static parts of the entry
   lcd.setCursor(0, 0);
   lcd.print(entries[state][0]);
   lcd.setCursor(0, 1);
   lcd.print(entries[state][1]);
 
-  //se alcune parti della entry sono dinamiche
+  //rendering dynamic parts of the entry
   switch (state) {
     case 2:
       {
