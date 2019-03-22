@@ -8,6 +8,8 @@ enum modalita {
   code = 1
 };
 
+bool isToneEnabled = false;
+
 modalita currentMod = 0;
 
 int firePin = A5;
@@ -37,9 +39,9 @@ String entries[20][2] = {                  //BombStatus
   {"Codice sbagliato", "RIPROVA TRA s..."}, //6
   {"Disinnescata! :)", "mm:ss     B=esci"}, //7
   {"Esplosa! :(     ", "00:00     B=esci"}, //8
-  {"Modalità?       ", "A=timer B=codice"}, //9
+  {"Modalita'?       ", "A=timer B=codice"}, //9
   {"Quanti secondi? ", "sec:<  >    A=ok"}, //10
-  {"sec:   pw:      ", "A=start B=abort "}, //11
+  {"sec:   pw:      ", "A=ok    B=abort "}, //11
   {"pw?  x tentativi", "pw:<      > A=ok"}, //12
   {"Missione fallita", "          B=esci"}, //13
   {"Esplode in mm:ss", "**allontanarsi**"}, //14
@@ -59,8 +61,8 @@ int BombSec = 0;
 int remainingAttemps = 0;
 int BombStatus = 0;
 
-char password[7] = {'0', '0', '0', '0', '0', '0'};
-char tryPassword[7] = {'0', '0', '0', '0', '0', '0'};
+char password[7] = {'0', '0', '0', '0', '0', '0', '\0'};
+char tryPassword[7] = {'0', '0', '0', '0', '0', '0', '\0'};
 
 const byte rows = 4; //four rows
 const byte cols = 4; //three columns
@@ -173,18 +175,18 @@ void performTimeDependantActions() {
   if (getTimeLeft() <= 0 && (BombStatus == 5 || BombStatus == 6 || BombStatus == 14)) {
     if (currentMod == timer) BombStatus = 8; //bomba esplosa  (hai perso)
     else if (currentMod == code) BombStatus = 15; //bomba esplosa (hai vinto)
-    
+
     firePinStatus = HIGH;
     fireEndTime = millis() + 4000;
     tonePinStatus = HIGH;
     toneEndTime = millis() + 4000;
   }
 
-  if ((BombStatus == 5 || BombStatus == 6 || BombStatus == 14) && (millis() - lastTimeOn) >= toneInterval * mod){
+  if ((BombStatus == 5 || BombStatus == 6 || BombStatus == 14) && (millis() - lastTimeOn) >= toneInterval * mod) {
     tonePinStatus = HIGH;
     toneEndTime = millis() + toneDuration;
   }
-  
+
 }
 
 void setBeepFrequencyMod() {
@@ -198,11 +200,13 @@ void updatePinsStatus() {
   long int now = millis();
   if (now >= fireEndTime) firePinStatus = LOW;
   if (now >= toneEndTime) tonePinStatus = LOW;
-  
+
   digitalWrite(firePin, firePinStatus);
-  
-  analogWrite(tonePin, tonePinStatus * 400); //0 or 400
-  lastTimeOn = now;
+
+  if (isToneEnabled || tonePinStatus == LOW) {
+    analogWrite(tonePin, tonePinStatus * 400); //0 or 400
+    lastTimeOn = now;
+  }
 }
 
 
@@ -315,16 +319,41 @@ void modInit(modalita m) {
   else if (m == code) {
     //write "code" mode init code here
     setWordToZeros(tryPassword);
+    remainingAttemps = 3;
   }
 }
 
 int wordLength(char _word[]) {
-  return sizeof(_word) / sizeof(_word[0]) - 1; // returns the size of the char array (how many letters)
+  //int wl = sizeof(_word) / sizeof(_word[0]) - 1; // returns the size of the char array (how many letters)
+  int wl = 0;
+  char letter = _word[0];
+
+  Serial.println("------------------------");
+  while (letter != '\0') {
+    Serial.print(letter);
+    wl++;
+    letter = _word[wl];
+  }
+  Serial.println();
+  Serial.print("Word Length: ");
+  Serial.println(wl);
+  return wl;
 }
 
 void setWordToZeros(char _word[]) {
   int numberOfChars = wordLength(_word);
-  for (int i = 0; i < numberOfChars; i++) _word[i] = '0';
+  Serial.println("***setting to zero***");
+  Serial.print("numberOfChars = ");
+  Serial.println(numberOfChars);
+  Serial.println("List of operations:");
+  for (int i = 0; i < numberOfChars; i++) {
+    Serial.print(_word[i]);
+    Serial.print(" -> ");
+    _word[i] = '0';
+    Serial.println(_word[i]);
+  }
+  _word[numberOfChars] = '\0';
+  Serial.println("*********************");
 }
 
 void wrongPasswordState() {
@@ -341,9 +370,10 @@ void addCharToIntFromRight(int &i, char c, int maxDigits) {
 void addCharToWordFIFO(char _word[], char c) {
   int w_length = wordLength(_word);
   for (int i = 0; i < w_length - 1; i++) {
+
     _word[i] = _word[i + 1];
   }
-  _word[w_length] = c;
+  _word[w_length - 1] = c;
 }
 
 void bombTimerStart() {
@@ -463,7 +493,7 @@ void printEntry(int state) {
       }
     case 14:
       {
-        lcd.setCursor(0, 1);
+        lcd.setCursor(11, 0);
         char timestamp[6];
         int secondiTOT = timeLeft / 1000;
         int minutiTOT = secondiTOT / 60;
