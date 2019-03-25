@@ -2,13 +2,13 @@
 #include <Keypad.h>
 #include <stdio.h>
 #include <LiquidCrystal.h>
-
+#include <limits.h>
 enum modalita {
   timer = 0,
   code = 1
 };
 
-bool isToneEnabled = false;
+bool isToneEnabled = true;
 
 modalita currentMod = 0;
 
@@ -21,7 +21,7 @@ bool tonePinStatus = LOW;
 long int toneEndTime;
 float mod = 1;
 unsigned long toneInterval = 1000;
-unsigned long toneDuration = 1;
+unsigned long toneDuration = 100;
 unsigned long lastTimeOn = 0;
 
 // initialize the library by associating any needed LCD interface pin
@@ -45,7 +45,7 @@ String entries[20][2] = {                  //BombStatus
   {"pw?  x tentativi", "pw:<      > A=ok"}, //12
   {"Missione fallita", "          B=esci"}, //13
   {"Esplode in mm:ss", "**allontanarsi**"}, //14
-  {"Bomba esplosa!!!", "          B=esci"}, //15
+  {"Bomba esplosa!!!", "          B=esci"} //15
 };
 
 unsigned long endTime;
@@ -77,7 +77,7 @@ byte colPins[cols] =  {9, 8, 7, 6}; //connect to the column pinouts of the keypa
 Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, rows, cols );
 
 void setup() {
-  Serial.begin(9600);
+  //Serial.begin(9600);
   pinMode(tonePin, OUTPUT);
   pinMode(firePin, OUTPUT);
   // set up the LCD's number of columns and rows:
@@ -94,14 +94,14 @@ void setup() {
 void loop() {
   char key = keypad.getKey();
   if (key != NO_KEY) {
-    Serial.println(key);
+    //Serial.println(key);
     keyPressed(key); //what to do when a key is pressed (logic)
   }
 
   performTimeDependantActions();
 
   //refresh the LCD
-  if ((millis() - lastRefresh) > 50)
+  if ((millis() - lastRefresh) > 150)
   {
     printEntry(BombStatus);
     lastRefresh = millis();
@@ -169,7 +169,9 @@ void performTimeDependantActions() {
   setBeepFrequencyMod();
 
   if (BombStatus == 6 && millis() >= nextTry) {
-    BombStatus = 5;
+   // Serial.println("wrong state over");
+    if (currentMod == timer) BombStatus = 5;
+    else if (currentMod == code) BombStatus = 12;
   }
 
   if (getTimeLeft() <= 0 && (BombStatus == 5 || BombStatus == 6 || BombStatus == 14)) {
@@ -200,18 +202,28 @@ void updatePinsStatus() {
   long int now = millis();
   if (now >= fireEndTime) firePinStatus = LOW;
   if (now >= toneEndTime) tonePinStatus = LOW;
+    
 
   digitalWrite(firePin, firePinStatus);
 
-  if (isToneEnabled || tonePinStatus == LOW) {
-    analogWrite(tonePin, tonePinStatus * 400); //0 or 400
+  if (tonePinStatus == HIGH)
     lastTimeOn = now;
-  }
+
+  if (isToneEnabled || tonePinStatus == LOW) 
+    analogWrite(tonePin, tonePinStatus * 400); //0 or 400
+    
 }
 
 
 long int getTimeLeft() {
-  return timeLeft = endTime - millis();
+  long int now = millis();
+  /*Serial.print("getting time left: ");
+  Serial.print(endTime);
+  Serial.print(" - ");
+  Serial.print(now);
+  Serial.print(endTime-now);
+  Serial.println();*/
+  return endTime-now;
 }
 
 void keyPressed(char key)
@@ -292,16 +304,24 @@ void keyPressed(char key)
       }
     case 12: {
         if (key == 'A') {
-          if ( isPasswordCorrect(tryPassword)) {
+          bool isCorrect = isPasswordCorrect(tryPassword);
+          if (isCorrect ) {
+            //Serial.println("Correct Password because isPasswordCorrect(tryPassword) returned TRUE");
             BombStatus = 14; //esplode in...
             bombTimerStart();
           }
           else {
-            if (remainingAttemps > 0) {
+            //Serial.println("Incorrect Password because isPasswordCorrect(tryPassword) returned FALSE");
+            if (remainingAttemps > 1) {
+              //Serial.print("remainingAttemps: ");
+              //Serial.print(remainingAttemps);
               remainingAttemps--;
+              //Serial.print(" -> ");
+              //Serial.println(remainingAttemps);
               wrongPasswordState();
             }
             else
+             // Serial.println("no more chanses left, going to bombstatus 13");
               BombStatus = 13; //missione fallita
           }
         }
@@ -318,6 +338,7 @@ void modInit(modalita m) {
   }
   else if (m == code) {
     //write "code" mode init code here
+    endTime = LONG_MAX;
     setWordToZeros(tryPassword);
     remainingAttemps = 3;
   }
@@ -328,35 +349,36 @@ int wordLength(char _word[]) {
   int wl = 0;
   char letter = _word[0];
 
-  Serial.println("------------------------");
+  //Serial.println("------------------------");
   while (letter != '\0') {
-    Serial.print(letter);
+    //Serial.print(letter);
     wl++;
     letter = _word[wl];
   }
-  Serial.println();
-  Serial.print("Word Length: ");
-  Serial.println(wl);
+ // Serial.println();
+  //Serial.print("Word Length: ");
+  //Serial.println(wl);
   return wl;
 }
 
 void setWordToZeros(char _word[]) {
   int numberOfChars = wordLength(_word);
-  Serial.println("***setting to zero***");
-  Serial.print("numberOfChars = ");
-  Serial.println(numberOfChars);
-  Serial.println("List of operations:");
+  //Serial.println("***setting to zero***");
+  //Serial.print("numberOfChars = ");
+  //Serial.println(numberOfChars);
+  //Serial.println("List of operations:");
   for (int i = 0; i < numberOfChars; i++) {
-    Serial.print(_word[i]);
-    Serial.print(" -> ");
+    //Serial.print(_word[i]);
+    //Serial.print(" -> ");
     _word[i] = '0';
-    Serial.println(_word[i]);
+    //Serial.println(_word[i]);
   }
   _word[numberOfChars] = '\0';
-  Serial.println("*********************");
+  //Serial.println("*********************");
 }
 
 void wrongPasswordState() {
+  //Serial.println("entering in wrong password state");
   BombStatus = 6; //riprova tra...
   nextTry = millis() + 5000;
 }
@@ -370,7 +392,6 @@ void addCharToIntFromRight(int &i, char c, int maxDigits) {
 void addCharToWordFIFO(char _word[], char c) {
   int w_length = wordLength(_word);
   for (int i = 0; i < w_length - 1; i++) {
-
     _word[i] = _word[i + 1];
   }
   _word[w_length - 1] = c;
@@ -391,10 +412,23 @@ void bombTimerStart() {
 }
 
 bool isPasswordCorrect(char pw[]) {
-  return strcmp(password, pw) != 0;
+  bool isEqual = strcmp(password, pw) == 0;
+  int c = 0;
+  while (pw[c] != '\0') {
+   // Serial.print(pw[c]);
+    //Serial.print(" <-> ");
+    //Serial.print(password[c]);
+    //Serial.println();
+    c++;
+  }
+ // if (isEqual) Serial.println("TRUE");
+ // else Serial.println("FALSE");
+  
+  return isEqual;
 }
 
 void printEntry(int state) {
+  
   //rendering static parts of the entry
   lcd.setCursor(0, 0);
   lcd.print(entries[state][0]);
@@ -483,7 +517,7 @@ void printEntry(int state) {
       {
         //STAMPA LA PASSWORD
         lcd.setCursor(4, 1);
-        lcd.print(password);
+        lcd.print(tryPassword);
 
         //stampa numero di tentativi rimasti
         lcd.setCursor(5, 0);
@@ -495,7 +529,7 @@ void printEntry(int state) {
       {
         lcd.setCursor(11, 0);
         char timestamp[6];
-        int secondiTOT = timeLeft / 1000;
+        int secondiTOT = getTimeLeft() / 1000;
         int minutiTOT = secondiTOT / 60;
         int secondi = secondiTOT % 60;
         sprintf(timestamp, "%02d:%02d", minutiTOT, secondi);
