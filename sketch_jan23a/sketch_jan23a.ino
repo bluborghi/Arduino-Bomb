@@ -72,12 +72,14 @@ char keys[rows][cols] = {
   {'7', '8', '9', 'C'},
   {'*', '0', '#', 'D'}
 };
-byte rowPins[rows] = {A3, A2, A1, A0}; //connect to the row pinouts of the keypad
-byte colPins[cols] =  {9, 8, 7, 6}; //connect to the column pinouts of the keypad
+//byte rowPins[rows] = {A3, A2, A1, A0}; //connect to the row pinouts of the keypad
+//byte colPins[cols] =  {9, 8, 7, 6}; //connect to the column pinouts of the keypad
+byte colPins[rows] = {A3, A2, A1, A0}; //connect to the row pinouts of the keypad
+byte rowPins[cols] =  {9, 8, 7, 6};  //connect to the column pinouts of the keypad
 Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, rows, cols );
 
 void setup() {
-  //Serial.begin(9600);
+  Serial.begin(9600);
   pinMode(tonePin, OUTPUT);
   pinMode(firePin, OUTPUT);
   // set up the LCD's number of columns and rows:
@@ -94,7 +96,7 @@ void setup() {
 void loop() {
   char key = keypad.getKey();
   if (key != NO_KEY) {
-    //Serial.println(key);
+    Serial.println(key);
     keyPressed(key); //what to do when a key is pressed (logic)
   }
 
