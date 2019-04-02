@@ -3,13 +3,10 @@ const int NUMBER_OF_CABLES = 3;
 const int cables[NUMBER_OF_CABLES] = {5, 6, 7};
 const int correctOrder[NUMBER_OF_CABLES] = {0, 1, 2};
 bool cablesState[NUMBER_OF_CABLES];//HIGH -> connected, LOW -> disconnected
-const int redLight = 8;
-const int greenLight = 9;
 int cablesCut = 0;
 
 long int lastChangeRed = 0;
 long int lastChangeGreen = 0;
-
 bool redLightState = LOW;
 bool greenLightState = LOW;
 
@@ -23,6 +20,17 @@ enum state {
 
 state bombState;
 
+const int redLightPin = 8;
+const int greenLightPin = 9;
+
+struct led {
+  int pin;
+  bool state;
+  long int lastChangeTime;
+  long int timeOn;
+  long int cyclePeriod;
+} redLed, greenLed;
+
 
 void setup() {
   setBombState(initialization);
@@ -30,8 +38,9 @@ void setup() {
   for (int i = 0; i < NUMBER_OF_CABLES; i++) {
     pinMode(cables[i], INPUT);
   }
-  pinMode(redLight, OUTPUT);
-  pinMode(greenLight, OUTPUT);
+ 
+  ledSetup(redLed,redLightPin);
+  ledSetup(greenLed, greenLightPin);
 
   waitForStart();
   setBombState(countdown);
@@ -40,31 +49,71 @@ void setup() {
 void loop() {
   switch (bombState) {
     case countdown: {
-        ledBlink(redLight, redLightState, lastChangeRed, 150, 850);
         checkCables();
         break;
       }
     case exploded:
     case defused: delay(1000);
   }
+  updateLeds();
+}
+
+void updateLed(led& myLed) {
+  long int now = millis();
+  if ((myled.state == HIGH) && (now >= myLed.lastChangeTime + myLed.timeOn)) {
+    setLightState(myLed, LOW);
+    myLed.lastChangeTime = now;
+  }
+  else if ((myled.state == LOW) && (now >= myLed.lastChangeTime + (myLed.cyclePeriod - myLed.timeOn) )) {
+    setLightState(myLed, HIGH);
+    myLed.lastChangeTime = now;
+  }
+}
+
+void updateLeds() {
+  updateLed(greenLed);
+  updateLed(redLed);
 }
 
 bool setBombState(state i) {
   if (i >= 0 && i < numberOfStates) {
-    bombState = i;
+    if (bombState != i) {
+      onBombStateLeaving(bombState, i);
+      onBombStateEntering(bombState, i);
+      bombState = i;
+    }
     return true;
   }
   return false;
 }
 
-void setLightState(const int light, bool &currentState, bool newState) {
-  currentState = newState;
-  digitalWrite(light, currentState);
+void onBombStateLeaving(state oldState, state newState) { //are you brexiting? LMAO
+  /*switch(oldState){
+    countdown: turnOff(redLed);
+  }*/
 }
 
-void toggleLightState(int light, bool &currentState) {
-  setLightState(light, currentState, !currentState);
+void onBombStateEntering(state oldState, state newState) {
+  
 }
+
+void ledSetup(led& myLed, int pin){
+  pinMode(pin, OUTPUT);
+  myLed.pin = pin;
+  myLed.state = LOW;
+  myLed.lastChangeTime = 0;
+  myLed.timeOn = 0;
+  myLed.cyclePeriod = 0;
+}
+
+void setLightState(led& myLed, bool newState) {
+  myLed.state = newState;
+}
+
+void toggleLightState(led& myLed) {
+  setLightState(myLed, !myLed.state);
+}
+
 void checkCables() {
   for (int i = 0; i < NUMBER_OF_CABLES; i++) {
     bool currentState = digitalRead(cables[i]); //if HIGH it's still connected, if LOW it has been cut
@@ -92,6 +141,7 @@ void bombDefused() {
   setLightState(greenLight, greenLightState, HIGH);
 }
 
+/*
 void ledBlink(const int ledPin, bool &ledState, long int &lastChange, int millisOn, int millisOff) {
   long int now = millis();
   if ((ledState == HIGH) && (now >= lastChange + millisOn)) {
@@ -103,7 +153,7 @@ void ledBlink(const int ledPin, bool &ledState, long int &lastChange, int millis
     lastChange = now;
   }
 }
-
+*/
 void waitForStart() { //starts only if all the cables are connected
   bool everythingIsFine;
   do {
