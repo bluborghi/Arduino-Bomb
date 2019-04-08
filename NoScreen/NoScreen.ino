@@ -1,11 +1,11 @@
 const int NUMBER_OF_CABLES = 3;
-
 const int cables[NUMBER_OF_CABLES] = {5, 6, 7};
 const int correctOrder[NUMBER_OF_CABLES] = {0, 1, 2};
+const int tonePin = 4;
 bool cablesState[NUMBER_OF_CABLES];//HIGH -> connected, LOW -> disconnected
 int cablesCut = 0;
-int lastTimeEverythingWasFine;
-int lastTimeEverythingWasNotFine;
+unsigned long lastTimeEverythingWasFine;
+unsigned long lastTimeEverythingWasNotFine;
 
 enum state {
   noState = 0,
@@ -36,6 +36,7 @@ void setup() {
   for (int i = 0; i < NUMBER_OF_CABLES; i++) {
     pinMode(cables[i], INPUT);
   }
+  pinMode(tonePin, OUTPUT);
   ledSetup(redLed, redLightPin);
   ledSetup(greenLed, greenLightPin);
   setBombState(initialization);
@@ -68,7 +69,6 @@ void updateLed(led& myLed) {
   //  Serial.print("isBlinking: ");
 
   if (isBlinking(myLed)) {
-    Serial.println(true);
     if ((myLed.state == HIGH) && (now >= myLed.lastChangeTime + myLed.timeOn)) {
       setLightState(myLed, LOW);
     }
@@ -78,7 +78,7 @@ void updateLed(led& myLed) {
     else if ((myLed.state == LOW) && (now >= myLed.lastChangeTime + (myLed.cyclePeriod - myLed.timeOn) )) {
       setLightState(myLed, HIGH);
     }
-  } else Serial.println(false);
+  } 
 }
 
 void updateLeds() {
@@ -133,17 +133,18 @@ void onBombStateEntering(state& oldState, state& newState) {
         break;
       }
     case countdown: {
-
         Serial.println("initialization entering state 2");
         setLightBlink(redLed, 200, 1000);
         break;
       }
     case defused: {
         setLightState(greenLed, HIGH);
+        tone(tonePin,440,100);
         break;
       }
     case exploded: {
         setLightState(redLed, HIGH);
+        tone(tonePin,800,5000);
         break;
       }
   }
@@ -162,6 +163,7 @@ bool isBlinking(led& myLed) {
   return (myLed.timeOn != 0);
 }
 
+
 void setLightBlink(led& myLed, int timeOn, int cyclePeriod, bool initState = HIGH) {
   Serial.print("setting light blink, Pin: ");
   Serial.println(myLed.pin);
@@ -173,6 +175,7 @@ void setLightBlink(led& myLed, int timeOn, int cyclePeriod, bool initState = HIG
 void setOneTimeBlink(led& myLed, int timeOn) {
   setLightBlink(myLed, timeOn, 0);
 }
+
 void stopLightBlink(led& myLed) {
   Serial.print("stopping light blink: ");
   setLightBlink(myLed, 0, 0, LOW);
@@ -208,16 +211,25 @@ void waitForStart() { //starts only if all the cables are connected
   bool everythingIsFine;
 
   everythingIsFine = true;
+  Serial.println("Checking cables");
   for (int i = 0; i < NUMBER_OF_CABLES; i++) {
+    Serial.print(i);
+    Serial.print(") -> ");
     cablesState[i] = digitalRead(cables[i]);
+    Serial.print(cablesState[i]);
     if (cablesState[i] == LOW)
       everythingIsFine = false;
+    Serial.println();
   }
-
-  
+  Serial.print("everything is fine: ");
+  Serial.println(everythingIsFine);
   if (everythingIsFine) lastTimeEverythingWasFine = millis();
   else lastTimeEverythingWasNotFine = millis();
 
+  Serial.print("lastTimeEverythingWasFine: "); Serial.println(lastTimeEverythingWasFine);
+  Serial.print("lastTimeEverythingWasNotFine: "); Serial.println(lastTimeEverythingWasNotFine);
+  Serial.print("now: "); Serial.println(millis());
+  
   if (lastTimeEverythingWasFine >= lastTimeEverythingWasNotFine +5000)
     setBombState(countdown);
 }
