@@ -21,22 +21,33 @@ state bombState;
 const int redLightPin = 8;
 const int greenLightPin = 9;
 
+struct buz {
+  int pin;
+  int frequency;
+  unsigned long timeOn;
+  unsigned long cyclePeriod;
+  unsigned long cycleBeginTime;
+} buzzer;
+
 struct led {
   int pin;
   bool state;
-  long int lastChangeTime;
-  long int timeOn;
-  long int cyclePeriod;
+  unsigned long lastChangeTime;
+  unsigned long timeOn;
+  unsigned long cyclePeriod;
 } redLed, greenLed;
 
 void setLightBlink(led& myLed, int timeOn, int cyclePeriod, bool initState = HIGH); //needs to be declared here in order to use default parameters
+
+
+//SETUP AND LOOP ------------------------------------------ 
 
 void setup() {
   Serial.begin(9600);
   for (int i = 0; i < NUMBER_OF_CABLES; i++) {
     pinMode(cables[i], INPUT);
   }
-  pinMode(tonePin, OUTPUT);
+  buzSetup(buzzer,tonePin);
   ledSetup(redLed, redLightPin);
   ledSetup(greenLed, greenLightPin);
   setBombState(initialization);
@@ -53,142 +64,10 @@ void loop() {
         break;
       }
   }
-  updateLeds();
+  updateAsyncStuff();
 }
 
-void updateLed(led& myLed) {
-  long int now = millis();
-  digitalWrite(myLed.pin, myLed.state);
-
-  //  Serial.print("Pin: ");
-  //  Serial.print(myLed.pin);
-  //  Serial.print(" ");
-  //  Serial.print("State: ");
-  //  Serial.print(myLed.state);
-  //  Serial.print(" ");
-  //  Serial.print("isBlinking: ");
-
-  if (isBlinking(myLed)) {
-    if ((myLed.state == HIGH) && (now >= myLed.lastChangeTime + myLed.timeOn)) {
-      setLightState(myLed, LOW);
-    }
-    else if ((myLed.state == LOW) && (myLed.cyclePeriod == 0)) { //"just blink once" type of blink
-      stopLightBlink(myLed);
-    }
-    else if ((myLed.state == LOW) && (now >= myLed.lastChangeTime + (myLed.cyclePeriod - myLed.timeOn) )) {
-      setLightState(myLed, HIGH);
-    }
-  } 
-}
-
-void updateLeds() {
-  updateLed(greenLed);
-  updateLed(redLed);
-}
-
-bool setBombState(state i) {
-  if (i >= 0 && i < numberOfStates) {
-    if (bombState != i) {
-
-
-      int lifesucks2 = i;
-      int lifesucks = bombState;
-      Serial.print(lifesucks);
-      Serial.print(" -> ");
-      Serial.print(lifesucks2);
-      Serial.print("\n");
-
-      onBombStateLeaving(bombState, i);
-      onBombStateEntering(bombState, i);
-      bombState = i;
-      Serial.println("bomb state set");
-    }
-    return true;
-  }
-  return false;
-}
-
-void onBombStateLeaving(state& oldState, state& newState) { //are you brexiting? LMAO
-  switch (oldState) {
-    case initialization: {
-        stopLightBlink(redLed);
-        stopLightBlink(greenLed);
-        break;
-      }
-    case countdown: {
-        stopLightBlink(redLed);
-        stopLightBlink(greenLed);
-        break;
-      }
-  }
-}
-
-void onBombStateEntering(state& oldState, state& newState) {
-  switch (newState) {
-    case initialization: {
-
-        Serial.println("initialization entering state 1");
-        setLightBlink(redLed, 250, 500);
-        setLightBlink(greenLed, 250, 500);
-        break;
-      }
-    case countdown: {
-        Serial.println("initialization entering state 2");
-        setLightBlink(redLed, 200, 1000);
-        break;
-      }
-    case defused: {
-        setLightState(greenLed, HIGH);
-        tone(tonePin,440,100);
-        break;
-      }
-    case exploded: {
-        setLightState(redLed, HIGH);
-        tone(tonePin,800,5000);
-        break;
-      }
-  }
-}
-
-
-void ledSetup(led& myLed, int pin) {
-  pinMode(pin, OUTPUT);
-  myLed.pin = pin;
-  setLightState(myLed, LOW);
-  myLed.timeOn = 0;
-  myLed.cyclePeriod = 0;
-}
-
-bool isBlinking(led& myLed) {
-  return (myLed.timeOn != 0);
-}
-
-
-void setLightBlink(led& myLed, int timeOn, int cyclePeriod, bool initState = HIGH) {
-  Serial.print("setting light blink, Pin: ");
-  Serial.println(myLed.pin);
-  setLightState(myLed, initState);
-  myLed.timeOn = timeOn;
-  myLed.cyclePeriod = cyclePeriod;
-}
-
-void setOneTimeBlink(led& myLed, int timeOn) {
-  setLightBlink(myLed, timeOn, 0);
-}
-
-void stopLightBlink(led& myLed) {
-  Serial.print("stopping light blink: ");
-  setLightBlink(myLed, 0, 0, LOW);
-}
-
-void setLightState(led& myLed, bool newState) {
-  myLed.state = newState;
-  myLed.lastChangeTime = millis();
-}
-
-void toggleLightState(led& myLed) {
-  setLightState(myLed, !myLed.state);
-}
+// MAIN FUNCTIONS ------------------------------------------
 
 void checkCables() {
   for (int i = 0; i < NUMBER_OF_CABLES; i++) {
@@ -229,7 +108,196 @@ void waitForStart() { //starts only if all the cables are connected
   Serial.print("lastTimeEverythingWasFine: "); Serial.println(lastTimeEverythingWasFine);
   Serial.print("lastTimeEverythingWasNotFine: "); Serial.println(lastTimeEverythingWasNotFine);
   Serial.print("now: "); Serial.println(millis());
-  
-  if (lastTimeEverythingWasFine >= lastTimeEverythingWasNotFine +5000)
+
+  if (lastTimeEverythingWasFine >= lastTimeEverythingWasNotFine + 5000)
     setBombState(countdown);
+}
+
+void updateAsyncStuff() {
+  updateLed(greenLed);
+  updateLed(redLed);
+  updateBuz(buzzer);
+}
+
+
+// BOMB STATE ------------------------------------------
+
+bool setBombState(state i) {
+  if (i >= 0 && i < numberOfStates) {
+    if (bombState != i) {
+
+      int lifesucks2 = i;
+      int lifesucks = bombState;
+      Serial.print(lifesucks);
+      Serial.print(" -> ");
+      Serial.print(lifesucks2);
+      Serial.print("\n");
+
+      onBombStateLeaving(bombState, i);
+      onBombStateEntering(bombState, i);
+      bombState = i;
+      Serial.println("bomb state set");
+    }
+    return true;
+  }
+  return false;
+}
+
+// EVENTS ------------------------------------------
+
+void onBombStateLeaving(state& oldState, state& newState) { //are you brexiting? LMAO
+  switch (oldState) {
+    case initialization: {
+        stopLightBlink(redLed);
+        stopLightBlink(greenLed);
+        break;
+      }
+    case countdown: {
+        stopLightBlink(redLed);
+        stopLightBlink(greenLed);
+        break;
+      }
+  }
+}
+
+void onBombStateEntering(state& oldState, state& newState) {
+  switch (newState) {
+    case initialization: {
+
+        Serial.println("initialization entering state 1");
+        setLightBlink(redLed, 250, 500);
+        setLightBlink(greenLed, 250, 500);
+        break;
+      }
+    case countdown: {
+        Serial.println("initialization entering state 2");
+        setLightBlink(redLed, 200, 1000);
+        setToneInterval(buzzer, 440, 200, 1000);
+        break;
+      }
+    case defused: {
+        setLightState(greenLed, HIGH);
+        noTone(buzzer.pin);
+        setSingleTone(buzzer, 587, 100);
+        break;
+      }
+    case exploded: {
+        setLightState(redLed, HIGH);
+        noTone(buzzer.pin);
+        setSingleTone(buzzer, 220, 5000);
+        break;
+      }
+  }
+}
+
+
+// LEDS ------------------------------------------
+
+void ledSetup(led& myLed, int pin) {
+  pinMode(pin, OUTPUT);
+  myLed.pin = pin;
+  setLightState(myLed, LOW);
+  myLed.timeOn = 0;
+  myLed.cyclePeriod = 0;
+}
+
+bool isBlinking(led& myLed) {
+  return (myLed.timeOn != 0);
+}
+
+void setLightBlink(led& myLed, int timeOn, int cyclePeriod, bool initState = HIGH) {
+  Serial.print("setting light blink, Pin: ");
+  Serial.println(myLed.pin);
+  setLightState(myLed, initState);
+  myLed.timeOn = timeOn;
+  myLed.cyclePeriod = cyclePeriod;
+}
+
+void setOneTimeBlink(led& myLed, int timeOn) {
+  setLightBlink(myLed, timeOn, 0);
+}
+
+void stopLightBlink(led& myLed) {
+  Serial.print("stopping light blink: ");
+  setLightBlink(myLed, 0, 0, LOW);
+}
+
+void setLightState(led& myLed, bool newState) {
+  myLed.state = newState;
+  myLed.lastChangeTime = millis();
+}
+
+void toggleLightState(led& myLed) {
+  setLightState(myLed, !myLed.state);
+}
+
+void updateLed(led& myLed) {
+  long int now = millis();
+  digitalWrite(myLed.pin, myLed.state);
+
+  //  Serial.print("Pin: ");
+  //  Serial.print(myLed.pin);
+  //  Serial.print(" ");
+  //  Serial.print("State: ");
+  //  Serial.print(myLed.state);
+  //  Serial.print(" ");
+  //  Serial.print("isBlinking: ");
+
+  if (isBlinking(myLed)) {
+    if ((myLed.state == HIGH) && (now >= myLed.lastChangeTime + myLed.timeOn)) {
+      setLightState(myLed, LOW);
+    }
+    else if ((myLed.state == LOW) && (myLed.cyclePeriod == 0)) { //"just blink once" type of blink
+      stopLightBlink(myLed);
+    }
+    else if ((myLed.state == LOW) && (now >= myLed.lastChangeTime + (myLed.cyclePeriod - myLed.timeOn) )) {
+      setLightState(myLed, HIGH);
+    }
+  }
+}
+
+// TONE ------------------------------------------
+
+void buzSetup(buz& myBuz, int pin){
+  myBuz.timeOn = 0;
+  myBuz.cyclePeriod = 0;
+  myBuz.frequency = 0;
+  myBuz.cycleBeginTime = 0;
+  myBuz.pin = pin;
+  pinMode(pin, OUTPUT);
+}
+
+void setToneInterval(buz& myBuz, int frequency, unsigned long timeOn, unsigned long cyclePeriod) {
+  myBuz.timeOn = timeOn;
+  myBuz.cyclePeriod = cyclePeriod;
+  myBuz.frequency = frequency;
+  Serial.print("setToneInterval pin: ");
+  Serial.print(myBuz.pin);
+  Serial.print(" freq: ");
+  Serial.print(myBuz.frequency);
+  Serial.print(" timeOn: ");
+  Serial.println(myBuz.timeOn);
+  tone(myBuz.pin, myBuz.frequency, myBuz.timeOn);
+  myBuz.cycleBeginTime = millis();
+}
+
+void setSingleTone(buz& myBuz, int frequency, unsigned long timeOn) {
+  myBuz.cyclePeriod = 0;
+  myBuz.cycleBeginTime = 0;
+  myBuz.timeOn = timeOn;
+  myBuz.frequency = frequency;
+  tone(myBuz.pin, myBuz.frequency, myBuz.timeOn);
+}
+
+bool isBuzBlinking(buz& myBuz){
+  return  myBuz.cyclePeriod != 0;
+}
+
+void updateBuz(buz& myBuz) {
+  long int now = millis();
+
+  if (isBuzBlinking(myBuz) && (now > myBuz.cyclePeriod + myBuz.cycleBeginTime)){
+    tone(myBuz.pin, myBuz.frequency, myBuz.timeOn);
+    myBuz.cycleBeginTime = now;
+  }
 }
