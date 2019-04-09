@@ -1,6 +1,6 @@
 const int NUMBER_OF_CABLES = 3;
 const int cables[NUMBER_OF_CABLES] = {5, 6, 7};
-const int correctOrder[NUMBER_OF_CABLES] = {0, 1, 2};
+const int correctOrder[NUMBER_OF_CABLES] = {1, 0, 2}; //white -> blue -> red
 const int tonePin = 4;
 bool cablesState[NUMBER_OF_CABLES];//HIGH -> connected, LOW -> disconnected
 int cablesCut = 0;
